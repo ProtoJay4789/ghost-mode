@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import hre from "hardhat";
+import { parseEther, encodeAbiParameters } from "viem";
 
 describe("GhostModeEngine", function () {
   let engine: any;
@@ -14,14 +15,14 @@ describe("GhostModeEngine", function () {
     // Deploy Privacy Processor
     privacy = await hre.viem.deployContract("PrivacyProcessor", [
       owner.account.address,
-      1, // PrivacyLevel.Partial
+      1n, // PrivacyLevel.Partial
     ]);
 
     // Deploy Oracle (using mock platform for testing)
     oracle = await hre.viem.deployContract("AgentCatcherOracle", [
       owner.account.address, // mock platform
       owner.account.address, // engine
-      hre.viem.parseEther("0.30"),
+      parseEther("0.30"),
     ]);
 
     // Deploy Engine
@@ -31,7 +32,7 @@ describe("GhostModeEngine", function () {
     ]);
 
     // Wire up
-    await engine.write.setRiskOracle([oracle.address]);
+    await engine.write.setRiskOracle([owner.account.address]); // Use owner as mock oracle for tests
     await engine.write.setPrivacyProcessor([privacy.address]);
   });
 
@@ -47,9 +48,9 @@ describe("GhostModeEngine", function () {
 
   describe("Transaction Submission", () => {
     it("Should allow authorized agents to submit", async () => {
-      const payload = hre.viem.encodeAbiParameters(
+      const payload = encodeAbiParameters(
         [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }],
-        ["0x1234567890123456789012345678901234567890", hre.viem.parseEther("1")]
+        ["0x1234567890123456789012345678901234567890", parseEther("1")]
       );
 
       const tx = await agent.writeContract({
@@ -63,10 +64,10 @@ describe("GhostModeEngine", function () {
     });
 
     it("Should reject unauthorized agents", async () => {
-      const [unauthorized] = await hre.viem.getWalletClients();
-      const payload = hre.viem.encodeAbiParameters(
-        [{ name: "to", type: "address" }],
-        ["0x1234567890123456789012345678901234567890"]
+      const [, , unauthorized] = await hre.viem.getWalletClients();
+      const payload = encodeAbiParameters(
+        [{ name: "data", type: "bytes" }],
+        ["0xdeadbeef"]
       );
 
       try {
@@ -84,9 +85,9 @@ describe("GhostModeEngine", function () {
   });
 
   describe("Risk Assessment", () => {
-    it("Should receive risk assessment from oracle", async () => {
-      // Submit a transaction
-      const payload = hre.viem.encodeAbiParameters(
+    it("Should receive risk assessment and approve safe transactions", async () => {
+      // Submit a transaction first
+      const payload = encodeAbiParameters(
         [{ name: "data", type: "bytes" }],
         ["0xdeadbeef"]
       );
@@ -98,32 +99,71 @@ describe("GhostModeEngine", function () {
         args: [payload],
       });
 
+      // Each test gets fresh deployment via beforeEach, so txId is always 1
       const txId = 1n;
 
-      // Simulate oracle callback
-      await oracle.write.receiveRiskAssessment([
+      // Simulate oracle calling back with Safe result
+      await engine.write.receiveRiskAssessment([
         txId,
-        0, // RiskLevel.Safe
+        0n, // RiskLevel.Safe
         15n,
         "Transaction passed all risk checks",
       ]);
 
       const tx = await engine.read.getTransactionStatus([txId]);
-      expect(tx[4]).to.equal(3n); // TxStatus.Approved
+      expect(tx.status).to.equal(3n); // TxStatus.Approved
     });
 
     it("Should block high-risk transactions when enforcement enabled", async () => {
-      const txId = 1n;
+      // Submit a transaction first
+      const payload = encodeAbiParameters(
+        [{ name: "data", type: "bytes" }],
+        ["0xdeadbeef"]
+      );
+      await agent.writeContract({
+        address: engine.address,
+        abi: engine.abi,
+        functionName: "submitTransaction",
+        args: [payload],
+      });
 
-      await oracle.write.receiveRiskAssessment([
+      const txId = 1n; // Fresh deployment each test
+
+      await engine.write.receiveRiskAssessment([
         txId,
-        2, // RiskLevel.Block
+        2n, // RiskLevel.Block
         85n,
         "Transaction blocked by risk assessment",
       ]);
 
       const tx = await engine.read.getTransactionStatus([txId]);
-      expect(tx[4]).to.equal(4n); // TxStatus.Rejected
+      expect(tx.status).to.equal(4n); // TxStatus.Rejected
+    });
+
+    it("Should flag review transactions as rejected by default", async () => {
+      // Submit a transaction first
+      const payload = encodeAbiParameters(
+        [{ name: "data", type: "bytes" }],
+        ["0xdeadbeef"]
+      );
+      await agent.writeContract({
+        address: engine.address,
+        abi: engine.abi,
+        functionName: "submitTransaction",
+        args: [payload],
+      });
+
+      const txId = 1n; // Fresh deployment each test
+
+      await engine.write.receiveRiskAssessment([
+        txId,
+        1n, // RiskLevel.Review
+        50n,
+        "Transaction flagged for manual review",
+      ]);
+
+      const tx = await engine.read.getTransactionStatus([txId]);
+      expect(tx.status).to.equal(4n); // TxStatus.Rejected
     });
   });
 
@@ -145,6 +185,18 @@ describe("GhostModeEngine", function () {
       } catch (err: any) {
         expect(err.message).to.include("not admin");
       }
+    });
+
+    it("Should allow admin to add and remove agents", async () => {
+      const [, , newAgent] = await hre.viem.getWalletClients();
+
+      expect(await engine.read.authorizedAgents([newAgent.account.address])).to.equal(false);
+
+      await engine.write.addAgent([newAgent.account.address]);
+      expect(await engine.read.authorizedAgents([newAgent.account.address])).to.equal(true);
+
+      await engine.write.removeAgent([newAgent.account.address]);
+      expect(await engine.read.authorizedAgents([newAgent.account.address])).to.equal(false);
     });
   });
 });

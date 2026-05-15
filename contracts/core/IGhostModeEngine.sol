@@ -63,6 +63,18 @@ interface IGhostModeEngine {
     /// @return approved Whether the transaction passed all checks
     function isApproved(uint256 txId) external view returns (bool approved);
 
+    /// @notice Called by risk oracle to report assessment results back to engine
+    /// @param txId Transaction ID
+    /// @param riskLevel Risk level (Safe, Review, Block)
+    /// @param riskScore Risk score (0-100)
+    /// @param reason Assessment reason
+    function receiveRiskAssessment(
+        uint256 txId,
+        RiskLevel riskLevel,
+        uint256 riskScore,
+        string calldata reason
+    ) external;
+
     // ── Admin Functions ────────────────────────────────────────────────
     function setRiskOracle(address _riskOracle) external;
     function setPrivacyProcessor(address _privacyProcessor) external;

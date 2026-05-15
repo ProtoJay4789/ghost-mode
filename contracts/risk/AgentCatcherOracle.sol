@@ -138,7 +138,7 @@ contract AgentCatcherOracle {
                 txId,
                 IGhostModeEngine.RiskLevel.Review,
                 50,
-                "Risk assessment failed — manual review required"
+                "Risk assessment failed - manual review required"
             );
         }
     }

@@ -159,9 +159,9 @@ contract GhostModeEngine is IGhostModeEngine {
     function getTransactionStatus(uint256 txId)
         external
         view
-        returns (GhostTransaction memory tx)
+        returns (GhostTransaction memory result)
     {
-        tx = _transactions[txId];
+        result = _transactions[txId];
     }
 
     function isApproved(uint256 txId) external view returns (bool approved) {

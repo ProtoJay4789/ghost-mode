@@ -1,0 +1,20 @@
+{
+  "name": "ghost-mode",
+  "version": "0.1.0",
+  "description": "Ghost Mode Engine — stack-agnostic privacy + risk layer for agentic transactions",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:engine": "hardhat run scripts/deploy-engine.ts --network somnia",
+    "deploy:oracle": "hardhat run scripts/deploy-oracle.ts --network somnia",
+    "invoke:risk": "hardhat run scripts/invoke-risk-check.ts --network somnia --"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-viem": "^2.0.0",
+    "hardhat": "^2.22.0",
+    "typescript": "^5.4.0",
+    "dotenv": "^16.4.0",
+    "viem": "^2.10.0"
+  }
+}
